@@ -1,0 +1,29 @@
+# Sensitive data
+.env
+*.jsonl
+positions.json
+monitor_state.json
+confluence_state.json
+pending_alerts.json
+signal_history.json
+researched_stocks.json
+blacklist.json
+support_zones.json
+apex_decisions*.py
+
+# Logs
+logs/
+*.log
+*.pid
+daily_reports/
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+.trade_credentials
+alert_log.jsonl
+trade_log.jsonl

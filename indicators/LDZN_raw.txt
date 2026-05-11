@@ -1,0 +1,203 @@
+{======================================================================================= 
+全能纯净版：RTE(精简) + VXLD风控 + FVG极致版 + KDJ量化信号 
+========================================================================================}
+
+{#######################################################}
+{              第一部分: RTE 核心系统 (纯净)              }
+{#######################################################}
+
+{================ 1. RTE 核心计算 ================}
+RTE_SHORT:=21;
+RTE_LONG:=112;
+RTE_TH:=20;
+RTE_SF:=7;
+RTE_LF:=3;
+RTE_AVG_MA:=3;
+RTE_USE_AVG:=0;
+
+{核心}
+RTE_SRC:=CLOSE;
+
+{计算过程}
+RTE_HH_S:=HHV(RTE_SRC,RTE_SHORT);
+RTE_LL_S:=LLV(RTE_SRC,RTE_SHORT);
+RTE_DEN_S:=RTE_HH_S-RTE_LL_S;
+RTE_SR_RAW:=100*(RTE_SRC-RTE_HH_S)/IF(RTE_DEN_S=0,0.000001,RTE_DEN_S);
+
+RTE_HH_L:=HHV(RTE_SRC,RTE_LONG);
+RTE_LL_L:=LLV(RTE_SRC,RTE_LONG);
+RTE_DEN_L:=RTE_HH_L-RTE_LL_L;
+RTE_LR_RAW:=100*(RTE_SRC-RTE_HH_L)/IF(RTE_DEN_L=0,0.000001,RTE_DEN_L);
+
+RTE_SR:=IF(RTE_SF>1,EMA(RTE_SR_RAW,RTE_SF),RTE_SR_RAW);
+RTE_LR:=IF(RTE_LF>1,EMA(RTE_LR_RAW,RTE_LF),RTE_LR_RAW);
+
+RTE_AVG_RAW:=(RTE_SR_RAW+RTE_LR_RAW)/2;
+RTE_AVG:=IF(RTE_AVG_MA>1,EMA(RTE_AVG_RAW,RTE_AVG_MA),RTE_AVG_RAW);
+
+{状态定义}
+RTE_OB_RAW:=(RTE_SR>=-RTE_TH AND RTE_LR>=-RTE_TH);
+RTE_OS_RAW:=(RTE_SR<=-100+RTE_TH AND RTE_LR<=-100+RTE_TH);
+
+RTE_OB:=IF(RTE_USE_AVG=1,RTE_AVG>=-RTE_TH,RTE_OB_RAW);
+RTE_OS:=IF(RTE_USE_AVG=1,RTE_AVG<=-100+RTE_TH,RTE_OS_RAW);
+
+{信号触发点}
+{反转箭头}
+RTE_OB_REV:=REF(RTE_OB,1) AND NOT(RTE_OB);
+RTE_OS_REV:=REF(RTE_OS,1) AND NOT(RTE_OS);
+
+{开始}
+RTE_OB_START:=RTE_OB AND NOT(REF(RTE_OB,1));
+RTE_OS_START:=RTE_OS AND NOT(REF(RTE_OS,1));
+
+{================ 2. 视觉装饰 ================}
+{A. 核心变色趋势线 (WMA 8)}
+TREND_VAL:=WMA(WMA(CLOSE, 8), 8);
+趋势线: TREND_VAL, COLORBLUE, LINETHICK2;
+趋势线涨: IF(TREND_VAL > REF(TREND_VAL, 1), TREND_VAL, DRAWNULL), COLORMAGENTA, LINETHICK2;
+
+{B. 长期牛熊分界 (180 MA)}
+MA_L_VAL:=MA(CLOSE, 180);
+MA_180_BASE: MA_L_VAL, COLORGREEN, LINETHICK2;
+MA_180_UP: IF(CLOSE >= MA_L_VAL, MA_L_VAL, DRAWNULL), COLORRED, LINETHICK2;
+
+{================ 3. 信号绘制 ================}
+{A. 持续状态 (圆点)}
+看跌趋势: IF(RTE_OS, HIGH, DRAWNULL), POINTDOT, LINETHICK3, COLORGREEN;
+看涨趋势: IF(RTE_OB, LOW, DRAWNULL), POINTDOT, LINETHICK3, COLORRED;
+
+{B. 开始时刻}
+DRAWICON(RTE_OS_START, HIGH, 39);
+DRAWICON(RTE_OB_START, LOW, 38);
+
+{C. 反转时刻}
+DRAWICON(RTE_OS_REV, LOW, 1);  {底部反转-买入}
+DRAWICON(RTE_OB_REV, HIGH, 2); {顶部反转-卖出}
+
+
+{#######################################################}
+{       第二部分: VXLD PRO + 智能风控                    }
+{#######################################################}
+
+{===== 0. 核心计算 =====}
+HMA_P:=18;
+SLOPE_T:=0.02;
+
+{HMA 动能}
+HMA_HALF:=WMA(CLOSE, HMA_P/2);
+HMA_FULL:=WMA(CLOSE, HMA_P);
+HMA_DIFF:=2*HMA_HALF - HMA_FULL;
+HMA_SQRT:=SQRT(HMA_P);
+HMA_MAIN:=WMA(HMA_DIFF, HMA_SQRT);
+HMA_SLOPE:=(HMA_MAIN - REF(HMA_MAIN,1))/REF(HMA_MAIN,1)*100;
+
+{HMA 状态}
+IS_RED:=HMA_SLOPE > SLOPE_T;
+IS_GREEN:=HMA_SLOPE < -SLOPE_T;
+IS_YELLOW:=ABS(HMA_SLOPE) <= SLOPE_T;
+
+{趋势滤网}
+MA_FILTER:=EMA(CLOSE, 60);
+IS_BULL_TREND:=C > MA_FILTER;
+IS_BEAR_TREND:=C < MA_FILTER;
+
+{智能止损}
+STOP_L:=REF(LLV(L, 5), 1);
+STOP_S:=REF(HHV(H, 5), 1);
+
+{巨量逻辑}
+HV_BAR:=V = HHV(V, 30);
+REF_H:=REF(HIGH, BARSLAST(HV_BAR));
+IS_BREAKOUT:=CROSS(C, REF_H);
+
+
+{#######################################################}
+{         第三部分: FVG 极致纤细版                       }
+{#######################################################}
+
+{========== 1. 参数设置 ==========}
+ATR_N := 14;
+ATR_MUL := 0.5;
+BODY_MUL := 1.2;
+TREND_P := 60;
+EXT_LEN := 30;
+FLIP_LEN := 10;
+
+{========== 2. 基础计算 ==========}
+TR_VAL := MAX(MAX((HIGH-LOW),ABS(REF(CLOSE,1)-HIGH)),ABS(REF(CLOSE,1)-LOW));
+ATR_VAL := MA(TR_VAL, ATR_N);
+AVG_BODY := MA(ABS(C-O), 20);
+MID_BODY := ABS(REF(C, 1) - REF(O, 1));
+
+{动能与趋势}
+IS_BIG_CANDLE := MID_BODY > REF(AVG_BODY, 1) * BODY_MUL;
+MA_TREND_FVG := MA(C, TREND_P);
+TREND_UP := C > MA_TREND_FVG;
+TREND_DN := C < MA_TREND_FVG;
+
+{FVG识别}
+RAW_BULL := L > REF(H, 2);
+RAW_BEAR := H < REF(L, 2);
+GAP_SIZE_BULL := L - REF(H, 2);
+GAP_SIZE_BEAR := REF(L, 2) - H;
+
+{严格过滤}
+VALID_BULL := RAW_BULL AND (GAP_SIZE_BULL > ATR_VAL * ATR_MUL) AND IS_BIG_CANDLE AND TREND_UP;
+VALID_BEAR := RAW_BEAR AND (GAP_SIZE_BEAR > ATR_VAL * ATR_MUL) AND IS_BIG_CANDLE AND TREND_DN;
+
+{========== 3-7: Tracking, invalidation, S/R flip ==========}
+T_BULL := BARSLAST(VALID_BULL);
+T_BEAR := BARSLAST(VALID_BEAR);
+SAFE_T_BULL := IF(T_BULL >= 0, T_BULL, 0);
+SAFE_T_BEAR := IF(T_BEAR >= 0, T_BEAR, 0);
+
+KEEP_BB_TOP := REF(BB_TOP, SAFE_T_BULL);
+KEEP_BB_BOT := REF(BB_BOT, SAFE_T_BULL);
+KEEP_SS_TOP := REF(SS_TOP, SAFE_T_BEAR);
+KEEP_SS_BOT := REF(SS_BOT, SAFE_T_BEAR);
+
+BULL_ALIVE := VALID_BULL=0 AND T_BULL >= 0 AND T_BULL <= EXT_LEN AND COUNT(C < KEEP_BB_BOT, T_BULL) = 0;
+BEAR_ALIVE := VALID_BEAR=0 AND T_BEAR >= 0 AND T_BEAR <= EXT_LEN AND COUNT(C > KEEP_SS_TOP, T_BEAR) = 0;
+
+KILL_BULL := REF(BULL_ALIVE, 1) AND C < KEEP_BB_BOT;
+KILL_BEAR := REF(BEAR_ALIVE, 1) AND C > KEEP_SS_TOP;
+
+
+{#######################################################}
+{      第四部分: KDJ+VOL 趋势信号                       }
+{#######################################################}
+
+K_P1 := 9;
+K_P2 := 3;
+K_P3 := 3;
+
+RSV_K := (CLOSE - LLV(LOW, K_P1)) / (HHV(HIGH, K_P1) - LLV(LOW, K_P1)) * 100;
+K_VAL := SMA(RSV_K, K_P2, 1);
+D_VAL := SMA(K_VAL, K_P3, 1);
+J_VAL := 3 * K_VAL - 2 * D_VAL;
+
+DIFF_K := EMA(CLOSE,5) - EMA(CLOSE,13);
+DEA_K := EMA(DIFF_K,6);
+
+UP_ZONE := (REF(K_VAL,1) >= 75 AND REF(D_VAL,1) >= 75 AND REF(J_VAL,1) >= 75);
+DN_ZONE := (REF(K_VAL,1) <= 25 AND REF(D_VAL,1) <= 25 AND REF(J_VAL,1) <= 25);
+
+S1_K := CROSS(D_VAL, K_VAL) AND UP_ZONE;
+G1_K := CROSS(K_VAL, D_VAL) AND UP_ZONE;
+J1_K := CROSS(K_VAL, D_VAL) AND DN_ZONE;
+D1_K := CROSS(D_VAL, K_VAL) AND DN_ZONE;
+
+KILL_S := BACKSET(G1_K, BARSLAST(S1_K) + 1);
+KILL_J := BACKSET(D1_K, BARSLAST(J1_K) + 1);
+
+COND_S := S1_K AND (KILL_S = 0);
+COND_J := J1_K AND (KILL_J = 0);
+
+VOL5 := SUM(VOL * (VOL > 0), 5) / SUM(VOL > 0, 5);
+IS_VOL_UP := VOL > VOL5 * 1.2;
+
+COND_J_STRONG := COND_J AND IS_VOL_UP;
+COND_J_WEAK := COND_J AND (IS_VOL_UP = 0);
+COND_S_STRONG := COND_S AND IS_VOL_UP;
+COND_S_WEAK := COND_S AND (IS_VOL_UP = 0);
